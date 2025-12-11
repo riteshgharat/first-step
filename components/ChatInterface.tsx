@@ -7,6 +7,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKestra } from '@/hooks/useKestra'; 
 import { AgentCard } from './AgentCard'; 
 
+// 1. Add these imports for Markdown Rendering
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 interface ChatInterfaceProps {
   initialIdea: string;
   onReset: () => void;
@@ -55,7 +59,7 @@ export default function ChatInterface({ initialIdea, onReset }: ChatInterfacePro
       </aside>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-[#09090b] relative">
+      <div className="flex-1 flex flex-col bg-[#09090b] relative overflow-auto">
         <ScrollArea className="flex-1 p-4 md:p-8">
           <div className="max-w-3xl mx-auto space-y-8 pb-20">
             
@@ -68,8 +72,6 @@ export default function ChatInterface({ initialIdea, onReset }: ChatInterfacePro
             </div>
 
             {/* Agent Responses */}
-            {/* Note: TypeScript now knows 'results.detective' is string | undefined */}
-            
             {results.detective && (
                <AgentCard 
                  title="The Detective" 
@@ -107,6 +109,7 @@ export default function ChatInterface({ initialIdea, onReset }: ChatInterfacePro
               />
             )}
 
+            {/* FIXED INVESTMENT MEMO SECTION */}
             {results.memo && (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -122,8 +125,21 @@ export default function ChatInterface({ initialIdea, onReset }: ChatInterfacePro
                       <p className="text-sm text-zinc-400">Sequoia Capital Simulation</p>
                    </div>
                 </div>
-                <div className="prose prose-invert max-w-none prose-headings:text-zinc-200 prose-p:text-zinc-400">
-                  <pre className="whitespace-pre-wrap font-sans">{results.memo}</pre>
+                
+                {/* 2. Replaced <pre> with ReactMarkdown and Tailwind Prose classes */}
+                <div className="prose prose-invert max-w-none 
+                  prose-p:text-zinc-300 prose-p:leading-relaxed
+                  prose-headings:text-zinc-100 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-4
+                  prose-strong:text-white prose-strong:font-semibold
+                  prose-ul:list-disc prose-ul:pl-4 prose-ul:my-2
+                  prose-li:text-zinc-300 prose-li:my-1
+                  prose-table:w-full prose-table:text-left prose-table:border-collapse prose-table:my-4
+                  prose-th:border-b prose-th:border-white/10 prose-th:p-2 prose-th:text-zinc-200
+                  prose-td:border-b prose-td:border-white/5 prose-td:p-2 prose-td:text-zinc-400"
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {results.memo}
+                  </ReactMarkdown>
                 </div>
               </motion.div>
             )}
@@ -142,7 +158,7 @@ export default function ChatInterface({ initialIdea, onReset }: ChatInterfacePro
   );
 }
 
-// 4. Strictly Typed Helper Component
+// Strictly Typed Helper Component
 interface StatusStepProps {
   label: string;
   status: 'waiting' | 'active' | 'done';

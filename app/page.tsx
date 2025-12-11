@@ -40,7 +40,7 @@ export default function Home() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span>Venture<span className="text-blue-500">Validator</span></span>
+            <span>First<span className="text-blue-500">Step</span></span>
           </div>
           <div className="flex gap-4 text-sm text-zinc-400">
             <span className="hover:text-white cursor-pointer transition">History</span>

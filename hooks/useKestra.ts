@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 
-// 1. Define Types for Kestra's API Structure
+// --- Types ---
 interface KestraTaskOutput {
   textOutput?: string;
   content?: string;
-  // We allow other keys because Kestra outputs can vary
-  [key: string]: unknown; 
+  [key: string]: unknown;
 }
 
 interface KestraTaskRun {
@@ -25,7 +24,6 @@ interface KestraExecutionResponse {
   taskRunList?: KestraTaskRun[];
 }
 
-// 2. Define Types for your UI Results
 export interface AgentResults {
   detective?: string;
   cfo?: string;
@@ -35,6 +33,7 @@ export interface AgentResults {
   memo?: string;
 }
 
+// --- Hook ---
 export function useKestra() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,36 +42,39 @@ export function useKestra() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startValidation = useCallback(async (idea: string) => {
+    // Reset State
     setLoading(true);
     setResults({});
     setStatus('STARTING');
 
     try {
+      // 1. Call Next.js API (which calls Kestra Webhook)
       const res = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idea }),
       });
 
-      if (!res.ok) throw new Error('Failed to start validation');
+      if (!res.ok) throw new Error('Failed to start validation flow');
 
       const { executionId } = await res.json();
       setExecutionId(executionId);
 
+      // 2. Start Polling Logic
       if (intervalRef.current) clearInterval(intervalRef.current);
 
       intervalRef.current = setInterval(async () => {
         try {
+          // Poll the Status API
           const poll = await fetch(`/api/status/${executionId}`);
-          
-          // 3. Apply the Type here
-          const data: KestraExecutionResponse = await poll.json();
+          if (!poll.ok) return;
 
+          const data: KestraExecutionResponse = await poll.json();
           setStatus(data.state?.current);
 
+          // 3. Extract Agent Outputs
           const newResults: AgentResults = {};
 
-          // 4. Loop with the correct type (KestraTaskRun) instead of 'any'
           data.taskRunList?.forEach((task: KestraTaskRun) => {
             const outputText = task.outputs?.textOutput || task.outputs?.content;
 
@@ -100,8 +102,10 @@ export function useKestra() {
             }
           });
 
+          // Update UI results
           setResults((prev) => ({ ...prev, ...newResults }));
 
+          // 4. Stop Polling if Finished
           if (['SUCCESS', 'FAILED', 'KILLED', 'WARNING'].includes(data.state?.current)) {
             if (intervalRef.current) clearInterval(intervalRef.current);
             setLoading(false);
@@ -110,7 +114,7 @@ export function useKestra() {
         } catch (err) {
           console.error("Polling Error:", err);
         }
-      }, 1000);
+      }, 1000); // Check every 1 second
 
     } catch (error) {
       console.error("Submission Error:", error);

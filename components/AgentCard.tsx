@@ -3,17 +3,18 @@ import { motion } from 'framer-motion';
 import { Search, TrendingUp, ShieldAlert, DollarSign, BrainCircuit, LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import ReactMarkdown from 'react-markdown'; 
+import remarkGfm from 'remark-gfm'; // <--- 1. Import this
 
-// 1. Define Valid Keys for Safety
+// 1. Define Valid Keys
 type IconKey = 'search' | 'dollar' | 'shield' | 'chess' | 'trend';
 type ColorKey = 'blue' | 'green' | 'red' | 'purple';
 
 // 2. Define Props Interface
 interface AgentCardProps {
   title: string;
-  icon: string; // We accept string but map it to IconKey safely
+  icon: string; 
   content: string;
-  color?: ColorKey; // Optional, defaults to blue
+  color?: ColorKey; 
   isTable?: boolean;
 }
 
@@ -34,7 +35,6 @@ const COLORS: Record<string, string> = {
 };
 
 export function AgentCard({ title, icon, content, color = "blue", isTable = false }: AgentCardProps) {
-  // Safe fallback if icon/color string doesn't match
   const Icon = ICONS[icon] || Search;
   const theme = COLORS[color] || COLORS.blue;
 
@@ -59,21 +59,38 @@ export function AgentCard({ title, icon, content, color = "blue", isTable = fals
           {isTable ? (
             <div className="overflow-x-auto">
                <ReactMarkdown 
+                 remarkPlugins={[remarkGfm]} // <--- 2. Enable Tables
                  components={{
-                    table: ({node, ...props}) => <table className="w-full text-left border-collapse" {...props} />,
-                    th: ({node, ...props}) => <th className="border-b border-white/10 p-2 font-medium text-zinc-400" {...props} />,
-                    td: ({node, ...props}) => <td className="border-b border-white/5 p-2" {...props} />
+                    table: ({node, ...props}) => (
+                      <table className="w-full text-left border-collapse my-4" {...props} />
+                    ),
+                    thead: ({node, ...props}) => (
+                      <thead className="bg-white/5" {...props} />
+                    ),
+                    th: ({node, ...props}) => (
+                      <th className="border-b border-white/10 p-3 font-semibold text-zinc-100" {...props} />
+                    ),
+                    td: ({node, ...props}) => (
+                      <td className="border-b border-white/5 p-3 text-zinc-400" {...props} />
+                    )
                  }}
                >
                  {content}
                </ReactMarkdown>
             </div>
           ) : (
-            <ReactMarkdown 
-               className="prose prose-invert prose-sm max-w-none prose-p:text-zinc-300 prose-headings:text-zinc-100 prose-strong:text-white"
+            // 3. Add 'prose' classes to style Lists, Headings, and Bold text
+            <div className="prose prose-invert prose-sm max-w-none 
+              prose-p:text-zinc-300 
+              prose-headings:text-zinc-100 prose-headings:font-bold prose-headings:mt-4 prose-headings:mb-2
+              prose-strong:text-white prose-strong:font-semibold
+              prose-ul:list-disc prose-ul:pl-4 prose-ul:my-2
+              prose-li:text-zinc-300 prose-li:my-1"
             >
-              {content}
-            </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </ReactMarkdown>
+            </div>
           )}
         </div>
       </Card>

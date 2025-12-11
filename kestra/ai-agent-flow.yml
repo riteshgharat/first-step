@@ -1,0 +1,191 @@
+id: startup-validator-groq
+namespace: dev.hackathon.groq
+description: "6-Agent Swarm: Financials, Strategy, Competitors, Risks, Trends & VC Verdict"
+
+triggers:
+  - id: web_trigger
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: "hackathon-secret-key" # <--- You will use this in your Next.js app
+
+inputs:
+  - id: idea
+    type: STRING
+    displayName: "Startup Idea"
+
+tasks:
+  # ------------------------------------------------------------------
+  # PHASE 1: GATHER INTELLIGENCE (The "Eyes")
+  # We fetch specific data for each specialist agent.
+  # ------------------------------------------------------------------
+  - id: gather_intelligence
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+      # For Detective & Strategist
+      - id: search_competitors
+        type: io.kestra.plugin.core.http.Request
+        uri: "https://google.serper.dev/search"
+        method: POST
+        contentType: application/json
+        headers:
+          X-API-KEY: "{{ secret('SERPER_API_KEY') }}"
+        body: |
+          { "q": "top 5 competitors having revenue business model for {{ inputs.idea }}", "num": 5}
+
+      # For Oracle & Skeptic
+      - id: search_news
+        type: io.kestra.plugin.core.http.Request
+        uri: "https://google.serper.dev/news"
+        method: POST
+        contentType: application/json
+        headers:
+          X-API-KEY: "{{ secret('SERPER_API_KEY') }}"
+        body: |
+          { "q": "{{ inputs.idea }} market trends business news"}
+
+      # For The CFO (Crucial for Numbers)
+      - id: search_market_stats
+        type: io.kestra.plugin.core.http.Request
+        uri: "https://google.serper.dev/search"
+        method: POST
+        contentType: application/json
+        headers:
+          X-API-KEY: "{{ secret('SERPER_API_KEY') }}"
+        body: |
+          { "q": "market size report 2025 CAGR {{ inputs.idea }} statistics"}
+
+      # For Skeptic & Strategist (The Graveyard)
+      - id: search_failures
+        type: io.kestra.plugin.core.http.Request
+        uri: "https://google.serper.dev/search"
+        method: POST
+        contentType: application/json
+        headers:
+          X-API-KEY: "{{ secret('SERPER_API_KEY') }}"
+        body: |
+          { "q": "why {{ inputs.idea }} startups fail reddit and x/twitter forums"}
+
+  # ------------------------------------------------------------------
+  # PHASE 2: THE SPECIALIST SWARM (5 Parallel Agents)
+  # ------------------------------------------------------------------
+  - id: swarm_analysis
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+
+      # 💰 THE CFO (Financial Analyst) -> Uses "Scout" (High Context Limit)
+      - id: cfo_agent
+        type: io.kestra.plugin.ai.agent.AIAgent
+        provider:
+          type: io.kestra.plugin.ai.provider.OpenAI
+          baseUrl: "https://api.groq.com/openai/v1"
+          apiKey: "{{ secret('GROQ_API_KEY') }}"
+          modelName: "meta-llama/llama-4-scout-17b-16e-instruct"
+        prompt: |
+          You are 'The CFO'. Do not use fluff. Use math.
+          DATA: {{ outputs.search_market_stats.body | jq('.organic[] | {title: .title, snippet: .snippet}') }}
+
+          Task: Estimate Market Potential for: "{{ inputs.idea }}".
+          Output a Markdown Table with TAM (Total Addressable Market), SAM, and SOM estimates in Dollars ($). Include the CAGR %. Do NOT break rows with newlines.Format: | Metric | Amount | Logic |
+
+      # 🕵️ THE STRATEGIST (Pivot Master) -> Uses "Scout"
+      - id: strategist_agent
+        type: io.kestra.plugin.ai.agent.AIAgent
+        provider:
+          type: io.kestra.plugin.ai.provider.OpenAI
+          baseUrl: "https://api.groq.com/openai/v1"
+          apiKey: "{{ secret('GROQ_API_KEY') }}"
+          modelName: "meta-llama/llama-4-scout-17b-16e-instruct"
+        prompt: |
+          You are 'The Strategist'.
+          FAILURES: {{ outputs.search_failures.body | jq('.organic[] | {title: .title, snippet: .snippet}') }}
+
+          Task:
+          1. Identify the "Value Gap".
+          2. Suggest 2 **Concrete Pivot Ideas** if the main idea is too crowded.
+          3. List 1 "Growth Hack".
+
+      # 🔎 THE DETECTIVE (Competitors) -> Uses "Scout"
+      - id: detective_agent
+        type: io.kestra.plugin.ai.agent.AIAgent
+        provider:
+          type: io.kestra.plugin.ai.provider.OpenAI
+          baseUrl: "https://api.groq.com/openai/v1"
+          apiKey: "{{ secret('GROQ_API_KEY') }}"
+          modelName: "meta-llama/llama-4-scout-17b-16e-instruct"
+        prompt: |
+          You are 'The Detective'.
+          DATA: {{ outputs.search_competitors.body | jq('.organic[] | {title: .title, snippet: .snippet}') }}
+          Task: List 2 active competitors and exactly what they do differently than: "{{ inputs.idea }}".
+
+      # 👿 THE SKEPTIC (Risks) -> Uses "Instant" (Fast & Critical)
+      - id: skeptic_agent
+        type: io.kestra.plugin.ai.agent.AIAgent
+        provider:
+          type: io.kestra.plugin.ai.provider.OpenAI
+          baseUrl: "https://api.groq.com/openai/v1"
+          apiKey: "{{ secret('GROQ_API_KEY') }}"
+          modelName: "llama-3.1-8b-instant"
+        prompt: |
+          You are 'The Skeptic'.
+          NEWS: {{ outputs.search_news.body | jq('.news[] | {title: .title, snippet: .snippet}') }}
+          Task: Find 2 fatal flaws. Why will "{{ inputs.idea }}" BANKRUPT the founder? Be harsh.
+
+      # 🔮 THE ORACLE (Trends) -> Uses "Versatile" (Smart)
+      - id: oracle_agent
+        type: io.kestra.plugin.ai.agent.AIAgent
+        provider:
+          type: io.kestra.plugin.ai.provider.OpenAI
+          baseUrl: "https://api.groq.com/openai/v1"
+          apiKey: "{{ secret('GROQ_API_KEY') }}"
+          modelName: "llama-3.3-70b-versatile"
+        prompt: |
+          You are 'The Oracle'.
+          TRENDS: {{ outputs.search_news.body | jq('.news[] | {title: .title, snippet: .snippet}') }}
+          Task: Is this market growing? Create a brief 3-Year Roadmap.
+
+  # ------------------------------------------------------------------
+  # PHASE 3: THE INVESTMENT MEMO (Final Synthesis)
+  # ------------------------------------------------------------------
+  - id: investment_memo
+    type: io.kestra.plugin.ai.agent.AIAgent
+    provider:
+      type: io.kestra.plugin.ai.provider.OpenAI
+      baseUrl: "https://api.groq.com/openai/v1"
+      apiKey: "{{ secret('GROQ_API_KEY') }}"
+      modelName: "llama-3.3-70b-versatile" # Smartest model for the final report
+    prompt: |
+      You are a Senior Partner at Sequoia Capital.
+      Write a formal **Investment Committee Memo** for: "{{ inputs.idea }}".
+
+      -- FINANCIALS (CFO) --
+      {{ outputs.cfo_agent.textOutput }}
+
+      -- STRATEGY (Strategist) --
+      {{ outputs.strategist_agent.textOutput }}
+
+      -- RISKS (Skeptic) --
+      {{ outputs.skeptic_agent.textOutput }}
+
+      -- COMPETITORS (Detective) --
+      {{ outputs.detective_agent.textOutput }}
+
+      -- TRENDS (Oracle) --
+      {{ outputs.oracle_agent.textOutput }}
+
+      ------------------------------------------------
+      STRUCTURE YOUR RESPONSE EXACTLY LIKE THIS:
+
+      ## 1. Executive Summary
+      (2 sentences. Fund or Pass?)
+
+      ## 2. Market Analysis (The Numbers)
+      (Present the CFO's TAM/SAM/SOM table clearly).
+
+      ## 3. The "Moat" & Competition
+      (Who owns the market? What is our unfair advantage?)
+
+      ## 4. The Pivot & Growth
+      (If we Fund, what is the 'Billion Dollar' vision? If we Pass, what is the 'Better Idea' from the Strategist?)
+
+      ## 5. Final Verdict
+      **Score:** [0-100]
+      **Decision:** [FUND / PASS / PIVOT]
